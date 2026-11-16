@@ -361,3 +361,105 @@
       routeLayer.clearLayers();
       map.removeLayer(stopLayer);
       var bounds = L.latLngBounds([]);
+
+      // 路線線形
+      rel.members.forEach(function (m) {
+        if (m.type !== "way") return;
+        if (/platform|stop/.test(m.role || "")) return;
+        var w = ways[m.ref];
+        if (!w) return;
+        var pts = [];
+        w.nodes.forEach(function (nid) {
+          var n = nodes[nid];
+          if (n) pts.push([n.lat, n.lon]);
+        });
+        if (pts.length > 1) {
+          L.polyline(pts, { color: "#1a73e8", weight: 5, opacity: 0.8 }).addTo(routeLayer);
+          pts.forEach(function (p) { bounds.extend(p); });
+        }
+      });
+
+      // 站點（優先用 platform，沒有才用 stop）
+      var plat = [], stp = [];
+      rel.members.forEach(function (m) {
+        if (m.type !== "node") return;
+        var role = m.role || "";
+        if (/platform/.test(role)) plat.push(m);
+        else if (/stop/.test(role)) stp.push(m);
+      });
+      var picked = plat.length ? plat : stp;
+      var stopList = [];
+      picked.forEach(function (m) {
+        var n = nodes[m.ref];
+        if (!n) return;
+        var name = (n.tags && (n.tags.name || n.tags["name:zh"])) || "(未命名站牌)";
+        stopList.push({ name: name, lat: n.lat, lng: n.lon });
+      });
+
+      stopList.forEach(function (s, i) {
+        var mk = L.marker([s.lat, s.lng], {
+          icon: L.divIcon({
+            className: "",
+            html: '<div class="num-icon">' + (i + 1) + '</div>',
+            iconSize: [24, 24], iconAnchor: [12, 12]
+          })
+        }).addTo(routeLayer).bindPopup("<b>" + (i + 1) + ".</b> " + esc(s.name));
+        s.marker = mk;
+        bounds.extend([s.lat, s.lng]);
+      });
+      if (userPos) bounds.extend([userPos.lat, userPos.lng]);
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30] });
+
+      // 面板
+      var tags = rel.tags || {};
+      var html = '<div class="routehead">' +
+        '<button id="btnBack">← 返回</button>' +
+        '<div class="info"><div class="t1">' + esc(route.ref) + ' 路</div>' +
+        '<div class="t2">' + esc(route.desc) + '</div></div></div>';
+      if (!stopList.length) {
+        html += '<div class="empty">這條路線沒有站點資料。</div>';
+      } else {
+        stopList.forEach(function (s, i) {
+          html += '<div class="stop" data-i="' + i + '"><div class="no">' + (i + 1) + '</div>' +
+            '<div class="nm">' + esc(s.name) + '</div></div>';
+        });
+      }
+      $content.innerHTML = html;
+      $content.scrollTop = 0;
+      document.getElementById("btnBack").addEventListener("click", backToList);
+      Array.prototype.forEach.call($content.querySelectorAll(".stop"), function (el) {
+        el.addEventListener("click", function () {
+          var s = stopList[parseInt(el.getAttribute("data-i"), 10)];
+          map.flyTo([s.lat, s.lng], Math.max(map.getZoom(), 17));
+          if (s.marker) s.marker.openPopup();
+        });
+      });
+      setStatus("路線 " + route.ref + "：共 " + stopList.length + " 個站點。" +
+        (tags.operator ? "（" + tags.operator + "）" : ""));
+    } catch (e) {
+      if (myToken !== token) return;
+      setStatus("載入路線失敗，請稍後再試。", true);
+    }
+  }
+
+  function backToList() {
+    token++;
+    routeLayer.clearLayers();
+    if (!map.hasLayer(stopLayer)) map.addLayer(stopLayer);
+    if (userCircle) map.fitBounds(userCircle.getBounds(), { padding: [20, 20] });
+    var stopCount = stopLayer.getLayers().length;
+    renderRouteList(stopCount);
+  }
+
+  /* ---------- 事件 ---------- */
+  $btn.addEventListener("click", locate);
+  $radius.addEventListener("change", function () {
+    if (userPos) setPosition(userPos.lat, userPos.lng, true);
+  });
+  map.on("click", function (e) {
+    setPosition(e.latlng.lat, e.latlng.lng, false);
+  });
+})();
+</script>
+</body>
+</html>
