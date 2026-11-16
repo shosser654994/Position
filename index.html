@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>附近公車查詢</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg2: #f3f5f8;
+    --text: #1d2330;
+    --muted: #6b7385;
+    --line: #dde1e8;
+    --accent: #1a73e8;
+    --accent-text: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161a22;
+      --bg2: #1f2430;
+      --text: #e8ebf2;
+      --muted: #9aa3b5;
+      --line: #2e3544;
+      --accent: #5b9dff;
+      --accent-text: #0b1220;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  #app { display: flex; flex-direction: column; height: 100dvh; }
+  #map { flex: 1 1 50%; min-height: 200px; z-index: 0; }
+  #panel {
+    flex: 1 1 50%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+  }
+  .toolbar {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg2);
+  }
+  button, select {
+    font: inherit;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--text);
+    padding: 8px 12px;
+  }
+  button.primary {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button:disabled { opacity: .6; }
+  #status {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    min-height: 34px;
+  }
+  #status.error { color: #d93025; }
+  #content { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .item {
+    display: flex; gap: 10px; align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .item:active, .item:hover { background: var(--bg2); }
+  .badge {
+    min-width: 54px; text-align: center;
+    background: var(--accent); color: var(--accent-text);
+    font-weight: 700; border-radius: 8px;
+    padding: 6px 8px; font-size: 15px;
+    word-break: keep-all;
+  }
+  .item .t1 { font-weight: 600; font-size: 15px; }
+  .item .t2 { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .routehead {
+    padding: 12px; border-bottom: 1px solid var(--line);
+    background: var(--bg2);
+    display: flex; gap: 10px; align-items: center;
+  }
+  .routehead .info { flex: 1; min-width: 0; }
+  .routehead .t1 { font-weight: 700; }
+  .routehead .t2 { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .stop {
+    display: flex; gap: 12px; align-items: center;
+    padding: 10px 12px; cursor: pointer;
+    position: relative;
+  }
+  .stop:hover, .stop:active { background: var(--bg2); }
+  .stop .no {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--accent); color: var(--accent-text);
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex: none;
+  }
+  .stop .nm { font-size: 15px; }
+  .empty { padding: 24px 16px; color: var(--muted); text-align: center; line-height: 1.7; }
+  .num-icon {
+    background: var(--accent); color: var(--accent-text);
+    border: 2px solid #fff; border-radius: 50%;
+    width: 24px; height: 24px;
+    font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.4);
+  }
+  .me-icon {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #1a73e8; border: 3px solid #fff;
+    box-shadow: 0 0 0 4px rgba(26,115,232,.3);
+  }
+  @media (min-width: 800px) {
+    #app { flex-direction: row-reverse; }
+    #map { flex: 1 1 auto; }
+    #panel { flex: 0 0 400px; border-top: none; border-right: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div id="panel">
+    <div class="toolbar">
+      <button id="btnLocate" class="primary">📍 定位我的位置</button>
+      <label style="font-size:13px;color:var(--muted)">範圍
+        <select id="radius">
+          <option value="300">300 公尺</option>
+          <option value="500" selected>500 公尺</option>
+          <option value="800">800 公尺</option>
+          <option value="1200">1200 公尺</option>
+        </select>
+      </label>
+    </div>
+    <div id="status">按「定位我的位置」開始，或直接點地圖選擇位置。</div>
+    <div id="content">
+      <div class="empty">尚未查詢附近公車。<br>也可以點擊地圖上任意位置來查詢。</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  var ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter"
+  ];
+
+  var map = L.map("map", { zoomControl: true }).setView([25.0478, 121.5170], 15);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> 貢獻者'
+  }).addTo(map);
+
+  var $status = document.getElementById("status");
+  var $content = document.getElementById("content");
+  var $btn = document.getElementById("btnLocate");
+  var $radius = document.getElementById("radius");
+
+  var userPos = null;
+  var userMarker = null;
+  var userCircle = null;
+  var stopLayer = L.layerGroup().addTo(map);
+  var routeLayer = L.layerGroup().addTo(map);
+  var routesCache = [];
+  var token = 0;
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function setStatus(msg, isError) {
+    $status.textContent = msg;
+    $status.className = isError ? "error" : "";
+  }
+
+  async function overpass(query) {
+    var lastErr = null;
+    for (var i = 0; i < ENDPOINTS.length; i++) {
+      try {
+        var ctrl = new AbortController();
+        var timer = setTimeout(function () { ctrl.abort(); }, 30000);
+        var res = await fetch(ENDPOINTS[i], {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "data=" + encodeURIComponent(query),
+          signal: ctrl.signal
+        });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return await res.json();
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("無法連線");
+  }
+
+  function routeTitle(tags) {
+    var ref = tags.ref || tags.name || "?";
+    var desc = "";
+    if (tags.from && tags.to) desc = tags.from + " → " + tags.to;
+    else if (tags.name) desc = tags.name;
+    return { ref: ref, desc: desc };
+  }
+
+  /* ---------- 定位 ---------- */
+  function locate() {
+    if (!navigator.geolocation) {
+      setStatus("此瀏覽器不支援定位功能，請直接點地圖選擇位置。", true);
+      return;
+    }
+    $btn.disabled = true;
+    setStatus("定位中，請在瀏覽器詢問時允許存取位置…");
+    navigator.geolocation.getCurrentPosition(function (p) {
+      $btn.disabled = false;
+      setPosition(p.coords.latitude, p.coords.longitude, true);
+    }, function (err) {
+      $btn.disabled = false;
+      var msg = "定位失敗";
+      if (err.code === 1) msg = "定位被拒絕，請在瀏覽器允許位置權限，或直接點地圖選擇位置。";
+      else if (err.code === 2) msg = "無法取得位置，請稍後再試，或直接點地圖選擇位置。";
+      else if (err.code === 3) msg = "定位逾時，請再試一次，或直接點地圖選擇位置。";
+      setStatus(msg, true);
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+  }
+
+  function setPosition(lat, lng, doZoom) {
+    userPos = { lat: lat, lng: lng };
+    var r = parseInt($radius.value, 10);
+    if (userMarker) map.removeLayer(userMarker);
+    if (userCircle) map.removeLayer(userCircle);
+    userMarker = L.marker([lat, lng], {
+      icon: L.divIcon({ className: "", html: '<div class="me-icon"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+      zIndexOffset: 1000
+    }).addTo(map).bindPopup("目前位置");
+    userCircle = L.circle([lat, lng], {
+      radius: r, color: "#1a73e8", weight: 1, fillOpacity: 0.06
+    }).addTo(map);
+    routeLayer.clearLayers();
+    if (doZoom) map.fitBounds(userCircle.getBounds(), { padding: [20, 20] });
+    loadNearby();
+  }
+
+  /* ---------- 附近公車 ---------- */
+  async function loadNearby() {
+    if (!userPos) return;
+    var myToken = ++token;
+    var r = parseInt($radius.value, 10);
+    setStatus("查詢附近站牌與路線中…");
+    $content.innerHTML = '<div class="empty">載入中…</div>';
+    stopLayer.clearLayers();
+    routeLayer.clearLayers();
+    if (!map.hasLayer(stopLayer)) map.addLayer(stopLayer);
+
+    var a = "(around:" + r + "," + userPos.lat + "," + userPos.lng + ")";
+    var q = "[out:json][timeout:25];" +
+      "(node" + a + '["highway"="bus_stop"];' +
+      "node" + a + '["public_transport"="platform"]["bus"="yes"];)->.s;' +
+      ".s out body;" +
+      'rel(bn.s)["route"="bus"];out tags;';
+
+    try {
+      var data = await overpass(q);
+      if (myToken !== token) return;
+
+      var stops = [];
+      var rels = [];
+      data.elements.forEach(function (el) {
+        if (el.type === "node") stops.push(el);
+        else if (el.type === "relation") rels.push(el);
+      });
+
+      stops.forEach(function (s) {
+        var name = (s.tags && (s.tags.name || s.tags["name:zh"])) || "(未命名站牌)";
+        L.circleMarker([s.lat, s.lon], {
+          radius: 6, color: "#fff", weight: 2, fillColor: "#e8710a", fillOpacity: 1
+        }).addTo(stopLayer).bindPopup("🚏 " + esc(name));
+      });
+
+      var seen = {};
+      routesCache = [];
+      rels.forEach(function (rel) {
+        var t = routeTitle(rel.tags || {});
+        var key = t.ref + "|" + t.desc;
+        if (seen[key]) return;
+        seen[key] = true;
+        routesCache.push({ id: rel.id, tags: rel.tags || {}, ref: t.ref, desc: t.desc });
+      });
+      routesCache.sort(function (x, y) {
+        return String(x.ref).localeCompare(String(y.ref), "zh-Hant", { numeric: true });
+      });
+
+      renderRouteList(stops.length);
+    } catch (e) {
+      if (myToken !== token) return;
+      setStatus("查詢失敗：伺服器忙碌或網路異常，請稍後再試。", true);
+      $content.innerHTML = '<div class="empty">無法取得資料。<br>請按「定位我的位置」重試。</div>';
+    }
+  }
+
+  function renderRouteList(stopCount) {
+    if (!routesCache.length) {
+      setStatus("範圍內找到 " + stopCount + " 個站牌，但沒有路線資料。");
+      $content.innerHTML = '<div class="empty">這個範圍內沒有找到公車路線。<br>可嘗試加大範圍或移動位置。<br>（資料來自 OpenStreetMap，各地完整度不同）</div>';
+      return;
+    }
+    setStatus("找到 " + stopCount + " 個站牌、" + routesCache.length + " 條路線，點擊路線查看站點。");
+    var html = "";
+    routesCache.forEach(function (r, i) {
+      html += '<div class="item" data-i="' + i + '">' +
+        '<div class="badge">' + esc(r.ref) + '</div>' +
+        '<div><div class="t1">' + esc(r.desc || "路線 " + r.ref) + '</div>' +
+        (r.tags.operator ? '<div class="t2">' + esc(r.tags.operator) + '</div>' : '') +
+        '</div></div>';
+    });
+    $content.innerHTML = html;
+    $content.scrollTop = 0;
+    Array.prototype.forEach.call($content.querySelectorAll(".item"), function (el) {
+      el.addEventListener("click", function () {
+        showRoute(routesCache[parseInt(el.getAttribute("data-i"), 10)]);
+      });
+    });
+  }
+
+  /* ---------- 路線詳情 ---------- */
+  async function showRoute(route) {
+    var myToken = ++token;
+    setStatus("載入路線 " + route.ref + " 中…");
+    try {
+      var data = await overpass("[out:json][timeout:30];rel(" + route.id + ");(._;>;);out body;");
+      if (myToken !== token) return;
+
+      var nodes = {}, ways = {}, rel = null;
+      data.elements.forEach(function (el) {
+        if (el.type === "node") nodes[el.id] = el;
+        else if (el.type === "way") ways[el.id] = el;
+        else if (el.type === "relation") rel = el;
+      });
+      if (!rel) throw new Error("no relation");
+
+      routeLayer.clearLayers();
+      map.removeLayer(stopLayer);
+      var bounds = L.latLngBounds([]);
