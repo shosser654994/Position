@@ -57,4 +57,33 @@
   .stop { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
   .stop:hover, .stop:active { background: var(--bg2); }
   .stop.near { background: rgba(26,115,232,.14); }
-  .stop .no { wid
+  .stop .no { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: none; }
+  .stop.near .no { background: #e8710a; color: #fff; }
+  .stop .nm { flex: 1; font-size: 15px; min-width: 0; }
+  .stop .nm small { display: block; color: var(--accent); font-size: 11px; }
+  .num-icon { background: var(--accent); color: var(--accent-text); border: 2px solid #fff; border-radius: 50%; width: 24px; height: 24px; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .num-icon.near { background: #e8710a; color: #fff; }
+  .me-icon { width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 4px rgba(26,115,232,.3); }
+  @media (min-width: 800px) {
+    #app { flex-direction: row-reverse; }
+    #map { flex: 1 1 auto; }
+    #panel { flex: 0 0 420px; border-top: none; border-right: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+  <div id="panel">
+    <div class="toolbar">
+      <button id="btnLocate" class="primary">📍 定位我的位置</button>
+      <select id="radius" title="搜尋範圍">
+        <option value="300">300 公尺</option>
+        <option value="500" selected>500 公尺</option>
+        <option value="800">800 公尺</option>
+      </select>
+    </div>
+    <div id="status">按「定位我的位置」開始，或直接點地圖選擇位置。</div>
+    <div id="content"><div class="empty">尚未查詢。<br>也可以點擊地圖任一位置，查詢該處附近的公車。</div></div>
+  </div>
+</div>
